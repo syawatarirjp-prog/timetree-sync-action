@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-
 GOOGLE_EVENT_COLORS = {
     "1": "#a4bdfc",
     "2": "#7ae7bf",
