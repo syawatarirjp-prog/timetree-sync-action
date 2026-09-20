@@ -1,8 +1,6 @@
+from dataclasses import dataclass, field
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
-from dataclasses import dataclass, field
-from typing import ClassVar
 
 
 GOOGLE_EVENT_COLORS = {
@@ -139,7 +137,7 @@ def _assignee_names(event: dict, metadata: dict) -> list[str]:
 
 @dataclass
 class Event:
-    SYNC_SOURCE: ClassVar[str] = "timetree-sync-action"
+    SYNC_SOURCE = "timetree-sync-action"
 
     id: str
     title: str
