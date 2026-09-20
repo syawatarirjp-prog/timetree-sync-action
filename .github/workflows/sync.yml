@@ -3,14 +3,8 @@ name: TimeTree Sync
 on:
   workflow_dispatch:
 
-  # 初回テスト用。mainへの変更時にも1回実行します。
-  push:
-    branches:
-      - main
-
-  # 初回テスト成功後に定期実行を有効化します。
-  # schedule:
-  #   - cron: "17 */3 * * *"
+  schedule:
+    - cron: "17 */3 * * *"
 
 jobs:
   sync:
