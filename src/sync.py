@@ -37,10 +37,17 @@ def sync():
         Config.TIMETREE_EMAIL,
         Config.TIMETREE_PASSWORD,
     )
-    calendar = client.get_calendar(
-        Config.TIMETREE_CALENDAR_CODE,
-    )
-    logger.info("Selected TimeTree calendar")
+
+    if Config.TIMETREE_CALENDAR_CODE:
+        calendar = client.get_calendar(Config.TIMETREE_CALENDAR_CODE)
+    else:
+        calendar = client.get_calendar_by_name(Config.TIMETREE_CALENDAR_NAME)
+
+    calendar_code = calendar.alias_code
+    if not calendar_code:
+        raise RuntimeError("Selected TimeTree calendar does not have an alias code.")
+
+    logger.info("Selected TimeTree calendar: %s", calendar.name)
 
     raw_events = client.get_events(calendar)
     events = [Event.from_timetree(raw) for raw in raw_events]
@@ -55,17 +62,13 @@ def sync():
         Config.GOOGLE_CALENDAR_ID,
     )
 
-    # Keep all Google copies for each TimeTree ID. This lets us clean up
-    # duplicates left by older versions or interrupted sync runs.
     google_event_map: dict[str, list[dict]] = {}
 
     for google_event in google_events:
         if not _is_managed_google_event(
             google_event,
-            Config.TIMETREE_CALENDAR_CODE,
+            calendar_code,
         ):
-            # Native Google Calendar events and events managed by another
-            # calendar/workflow are intentionally ignored.
             continue
 
         timetree_id = _private_properties(google_event)["timetree_id"]
@@ -81,33 +84,31 @@ def sync():
         if not matches:
             google.create_event(
                 Config.GOOGLE_CALENDAR_ID,
-                event.to_google(Config.TIMETREE_CALENDAR_CODE),
+                event.to_google(calendar_code),
             )
             created_count += 1
             continue
 
-        # Keep one canonical Google event for this TimeTree event.
         google_event = matches[0]
         props = _private_properties(google_event)
         needs_marker_migration = (
             props.get("sync_source") != Event.SYNC_SOURCE
-            or props.get("timetree_calendar_code") != Config.TIMETREE_CALENDAR_CODE
+            or props.get("timetree_calendar_code") != calendar_code
         )
 
         if needs_marker_migration or not event.equals_google(
             google_event,
-            Config.TIMETREE_CALENDAR_CODE,
+            calendar_code,
         ):
             google.update_event(
                 Config.GOOGLE_CALENDAR_ID,
                 google_event["id"],
-                event.to_google(Config.TIMETREE_CALENDAR_CODE),
+                event.to_google(calendar_code),
             )
             updated_count += 1
         else:
             skipped_count += 1
 
-        # Remove duplicate Google copies carrying the same TimeTree ID.
         for duplicate in matches[1:]:
             google.delete_event(
                 Config.GOOGLE_CALENDAR_ID,
@@ -115,9 +116,6 @@ def sync():
             )
             deleted_count += 1
 
-    # Delete Google events owned by this sync when the source TimeTree event
-    # no longer exists. Native Google Calendar events are never included in
-    # google_event_map, so they are left untouched.
     for timetree_id, matches in google_event_map.items():
         if timetree_id in timetree_ids:
             continue
