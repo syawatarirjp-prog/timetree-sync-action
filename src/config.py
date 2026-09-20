@@ -25,3 +25,13 @@ class Config:
             raise RuntimeError(
                 "Set either TIMETREE_CALENDAR_CODE or TIMETREE_CALENDAR_NAME."
             )
+
+    @classmethod
+    def calendar_names(cls):
+        if not cls.TIMETREE_CALENDAR_NAME:
+            return []
+        return [
+            name.strip()
+            for name in cls.TIMETREE_CALENDAR_NAME.replace("、", ",").split(",")
+            if name.strip()
+        ]
