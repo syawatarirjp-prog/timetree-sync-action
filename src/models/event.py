@@ -1,7 +1,8 @@
-from dataclasses import dataclass, field
 from datetime import datetime
-from typing import ClassVar
 from zoneinfo import ZoneInfo
+
+from dataclasses import dataclass, field
+from typing import ClassVar
 
 
 GOOGLE_EVENT_COLORS = {
