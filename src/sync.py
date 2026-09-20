@@ -10,11 +10,6 @@ def _private_properties(google_event: dict) -> dict:
 
 
 def _is_managed_google_event(google_event: dict, calendar_code: str) -> bool:
-    """Return True only for events owned by this TimeTree sync.
-
-    Events created by older versions are also accepted when they contain a
-    timetree_id but do not yet have the newer ownership markers.
-    """
     props = _private_properties(google_event)
     timetree_id = props.get("timetree_id")
 
@@ -24,28 +19,18 @@ def _is_managed_google_event(google_event: dict, calendar_code: str) -> bool:
     sync_source = props.get("sync_source")
     source_calendar_code = props.get("timetree_calendar_code")
 
-    # Backward compatibility for events created by older versions.
     if sync_source is None and source_calendar_code is None:
         return True
 
     return sync_source == Event.SYNC_SOURCE and source_calendar_code == calendar_code
 
 
-def sync():
-    client = TimeTree()
-    client.login(
-        Config.TIMETREE_EMAIL,
-        Config.TIMETREE_PASSWORD,
-    )
-
-    if Config.TIMETREE_CALENDAR_CODE:
-        calendar = client.get_calendar(Config.TIMETREE_CALENDAR_CODE)
-    else:
-        calendar = client.get_calendar_by_name(Config.TIMETREE_CALENDAR_NAME)
-
+def _sync_calendar(client, google, google_events, calendar):
     calendar_code = calendar.alias_code
     if not calendar_code:
-        raise RuntimeError("Selected TimeTree calendar does not have an alias code.")
+        raise RuntimeError(
+            f"Selected TimeTree calendar '{calendar.name}' does not have an alias code."
+        )
 
     logger.info("Selected TimeTree calendar: %s", calendar.name)
 
@@ -53,22 +38,10 @@ def sync():
     events = [Event.from_timetree(raw) for raw in raw_events]
     timetree_ids = {event.id for event in events}
 
-    google = GoogleCalendarClient(
-        Config.GOOGLE_SERVICE_ACCOUNT_JSON,
-    )
-    logger.info("Connected to Google Calendar")
-
-    google_events = google.list_events(
-        Config.GOOGLE_CALENDAR_ID,
-    )
-
     google_event_map: dict[str, list[dict]] = {}
 
     for google_event in google_events:
-        if not _is_managed_google_event(
-            google_event,
-            calendar_code,
-        ):
+        if not _is_managed_google_event(google_event, calendar_code):
             continue
 
         timetree_id = _private_properties(google_event)["timetree_id"]
@@ -81,11 +54,13 @@ def sync():
 
     for event in events:
         matches = google_event_map.get(event.id, [])
+
         if not matches:
-            google.create_event(
+            created = google.create_event(
                 Config.GOOGLE_CALENDAR_ID,
                 event.to_google(calendar_code),
             )
+            google_events.append(created)
             created_count += 1
             continue
 
@@ -128,9 +103,38 @@ def sync():
             deleted_count += 1
 
     logger.info(
-        "Sync complete: created=%d updated=%d deleted=%d skipped=%d",
+        "Calendar '%s' sync complete: created=%d updated=%d deleted=%d skipped=%d",
+        calendar.name,
         created_count,
         updated_count,
         deleted_count,
         skipped_count,
     )
+
+
+def sync():
+    client = TimeTree()
+    client.login(
+        Config.TIMETREE_EMAIL,
+        Config.TIMETREE_PASSWORD,
+    )
+
+    if Config.TIMETREE_CALENDAR_CODE:
+        calendars = [client.get_calendar(Config.TIMETREE_CALENDAR_CODE)]
+    else:
+        calendars = [
+            client.get_calendar_by_name(name)
+            for name in Config.calendar_names()
+        ]
+
+    google = GoogleCalendarClient(
+        Config.GOOGLE_SERVICE_ACCOUNT_JSON,
+    )
+    logger.info("Connected to Google Calendar")
+
+    google_events = google.list_events(
+        Config.GOOGLE_CALENDAR_ID,
+    )
+
+    for calendar in calendars:
+        _sync_calendar(client, google, google_events, calendar)
