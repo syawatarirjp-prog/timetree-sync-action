@@ -35,7 +35,14 @@ def _sync_calendar(client, google, google_events, calendar):
     logger.info("Selected TimeTree calendar: %s", calendar.name)
 
     raw_events = client.get_events(calendar)
-    events = [Event.from_timetree(raw) for raw in raw_events]
+    events = [
+        Event.from_timetree(
+            raw,
+            calendar_name=calendar.name,
+            calendar_metadata=calendar.metadata,
+        )
+        for raw in raw_events
+    ]
     timetree_ids = {event.id for event in events}
 
     google_event_map: dict[str, list[dict]] = {}
