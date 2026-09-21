@@ -35,6 +35,22 @@ def _sync_calendar(client, google, google_events, calendar):
     logger.info("Selected TimeTree calendar: %s", calendar.name)
 
     raw_events = client.get_events(calendar)
+
+    # TimeTree can return child records for modified occurrences of a recurring series.
+    # Syncing those as standalone events as well as the recurring master can duplicate
+    # the same date in Google Calendar, so keep the recurring master and skip children.
+    recurring_children = [
+        raw
+        for raw in raw_events
+        if raw.get("parent_id") or raw.get("recurring_uuid")
+    ]
+    if recurring_children:
+        logger.info(
+            "Skipping %d recurrence exception child events in calendar '%s'",
+            len(recurring_children),
+            calendar.name,
+        )
+
     events = [
         Event.from_timetree(
             raw,
@@ -42,6 +58,7 @@ def _sync_calendar(client, google, google_events, calendar):
             calendar_metadata=calendar.metadata,
         )
         for raw in raw_events
+        if not raw.get("parent_id") and not raw.get("recurring_uuid")
     ]
     timetree_ids = {event.id for event in events}
 
