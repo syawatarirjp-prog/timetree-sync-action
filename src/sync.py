@@ -106,20 +106,11 @@ def _sync_calendar(client, google, google_events, calendar):
             google_event,
             calendar_code,
         ):
-            try:
-                google.update_event(
-                    Config.GOOGLE_CALENDAR_ID,
-                    google_event["id"],
-                    event.to_google(calendar_code),
-                )
-            except Exception:
-                logger.exception(
-                    "Google update failed for TimeTree event id=%s all_day=%s recurrence=%s",
-                    event.id,
-                    event.all_day,
-                    event.recurrence,
-                )
-                raise
+            google.update_event(
+                Config.GOOGLE_CALENDAR_ID,
+                google_event["id"],
+                event.to_google(calendar_code),
+            )
             updated_count += 1
         else:
             skipped_count += 1
