@@ -152,6 +152,16 @@ def _normalize_recurrence_rules(event: dict, start: datetime) -> list[str]:
                     + rule[match.end(1) :]
                 )
 
+        # RFC 5545 forbids COUNT and UNTIL in the same RRULE.
+        # Some TimeTree-generated legacy/holiday events contain both. Prefer COUNT,
+        # which preserves the explicit number of occurrences and avoids Google's
+        # "Invalid recurrence rule" rejection.
+        if rule.startswith("RRULE:") and "COUNT=" in rule and "UNTIL=" in rule:
+            parts = rule.split(";")
+            rule = ";".join(
+                part for part in parts if not part.startswith("UNTIL=")
+            )
+
         if event.get("all_day"):
             # Google requires recurrence values for an all-day DTSTART to use DATE,
             # not DATE-TIME. TimeTree can emit UTC date-times for EXDATE/RDATE.
