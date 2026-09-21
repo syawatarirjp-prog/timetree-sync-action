@@ -133,11 +133,11 @@ def _normalize_recurrence_rules(event: dict, start: datetime) -> list[str]:
         if rule.startswith("RRULE:") and not event.get("all_day"):
             match = re.search(r"UNTIL=(\d{8})(?=;|$)", rule)
             if match:
-                until_date = datetime.strptime(match.group(1), "%Y%m%d")
+                until_text = match.group(1)
                 local_until = datetime(
-                    until_date.year,
-                    until_date.month,
-                    until_date.day,
+                    int(until_text[0:4]),
+                    int(until_text[4:6]),
+                    int(until_text[6:8]),
                     start.hour,
                     start.minute,
                     start.second,
