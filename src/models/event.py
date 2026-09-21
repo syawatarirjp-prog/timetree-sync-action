@@ -149,6 +149,9 @@ class Event:
     label_name: str | None = None
     label_color: str | None = None
     assignee_names: list[str] = field(default_factory=list)
+    recurrence: list[str] = field(default_factory=list)
+    parent_id: str | None = None
+    recurring_uuid: str | None = None
 
     @classmethod
     def from_timetree(
@@ -183,6 +186,13 @@ class Event:
             label_name=label.get("name") or None,
             label_color=label.get("color"),
             assignee_names=_assignee_names(event, metadata),
+            recurrence=[
+                rule.strip()
+                for rule in (event.get("recurrences") or [])
+                if isinstance(rule, str) and rule.strip()
+            ],
+            parent_id=event.get("parent_id") or None,
+            recurring_uuid=event.get("recurring_uuid") or None,
         )
 
     def _google_description(self) -> str | None:
@@ -250,6 +260,9 @@ class Event:
         if color_id:
             event["colorId"] = color_id
 
+        if self.recurrence:
+            event["recurrence"] = self.recurrence
+
         return event
 
     def equals_google(self, google_event: dict, calendar_code: str) -> bool:
@@ -262,4 +275,5 @@ class Event:
             and google.get("start") == google_event.get("start")
             and google.get("end") == google_event.get("end")
             and google.get("colorId") == google_event.get("colorId")
+            and google.get("recurrence") == google_event.get("recurrence")
         )
