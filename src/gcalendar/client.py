@@ -43,7 +43,7 @@ class GoogleCalendarClient:
                 self._service.events()
                 .list(
                     calendarId=calendar_id,
-                    singleEvents=True,
+                    singleEvents=False,
                     maxResults=2500,
                     pageToken=page_token,
                 )
