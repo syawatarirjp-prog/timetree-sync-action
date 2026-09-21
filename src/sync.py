@@ -36,12 +36,20 @@ def _sync_calendar(client, google, google_events, calendar):
 
     raw_events = client.get_events(calendar)
 
+    # TimeTree may keep deleted events as tombstones with deactivated_at set.
+    # Exclude them so the corresponding Google event is removed below.
+    active_raw_events = [
+        raw
+        for raw in raw_events
+        if raw.get("deactivated_at") is None
+    ]
+
     # TimeTree can return child records for modified occurrences of a recurring series.
     # Syncing those as standalone events as well as the recurring master can duplicate
     # the same date in Google Calendar, so keep the recurring master and skip children.
     recurring_children = [
         raw
-        for raw in raw_events
+        for raw in active_raw_events
         if raw.get("parent_id") or raw.get("recurring_uuid")
     ]
     if recurring_children:
@@ -57,7 +65,7 @@ def _sync_calendar(client, google, google_events, calendar):
             calendar_name=calendar.name,
             calendar_metadata=calendar.metadata,
         )
-        for raw in raw_events
+        for raw in active_raw_events
         if not raw.get("parent_id") and not raw.get("recurring_uuid")
     ]
     timetree_ids = {event.id for event in events}
