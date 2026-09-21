@@ -36,6 +36,37 @@ def _sync_calendar(client, google, google_events, calendar):
 
     raw_events = client.get_events(calendar)
 
+    # Temporary safe diagnostic for the user-created recurrence test only.
+    # Do not log unrelated event titles or notes in this public repository.
+    test_events = [raw for raw in raw_events if raw.get("title") == "同期テスト"]
+    test_ids = {
+        str(value)
+        for raw in test_events
+        for value in (raw.get("id"), raw.get("uuid"), raw.get("recurring_uuid"))
+        if value
+    }
+    related_test_events = [
+        raw
+        for raw in raw_events
+        if raw.get("title") == "同期テスト"
+        or str(raw.get("parent_id") or "") in test_ids
+        or str(raw.get("recurring_uuid") or "") in test_ids
+    ]
+    for raw in related_test_events:
+        logger.info(
+            "SYNC_TEST event id=%s uuid=%s start_at=%s end_at=%s recurrences=%s "
+            "recurring_uuid=%s parent_id=%s deactivated_at=%s updated_at=%s",
+            raw.get("id"),
+            raw.get("uuid"),
+            raw.get("start_at"),
+            raw.get("end_at"),
+            raw.get("recurrences"),
+            raw.get("recurring_uuid"),
+            raw.get("parent_id"),
+            raw.get("deactivated_at"),
+            raw.get("updated_at"),
+        )
+
     # TimeTree may keep deleted events as tombstones with deactivated_at set.
     # Exclude them so the corresponding Google event is removed below.
     active_raw_events = [
