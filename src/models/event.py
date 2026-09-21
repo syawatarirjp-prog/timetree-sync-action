@@ -1,5 +1,6 @@
+import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 GOOGLE_EVENT_COLORS = {
@@ -115,6 +116,57 @@ def _calendar_users(metadata: dict) -> dict:
     return users
 
 
+def _normalize_recurrence_rules(event: dict, start: datetime) -> list[str]:
+    rules = []
+
+    for raw_rule in event.get("recurrences") or []:
+        if not isinstance(raw_rule, str):
+            continue
+
+        rule = raw_rule.strip()
+        if not rule:
+            continue
+
+        # TimeTree may emit a date-only UNTIL value for timed recurring events.
+        # Google Calendar requires the UNTIL value to be an RFC5545 UTC datetime
+        # when DTSTART has a time component.
+        if rule.startswith("RRULE:") and not event.get("all_day"):
+            match = re.search(r"UNTIL=(\d{8})(?=;|$)", rule)
+            if match:
+                until_date = datetime.strptime(match.group(1), "%Y%m%d")
+                local_until = datetime(
+                    until_date.year,
+                    until_date.month,
+                    until_date.day,
+                    start.hour,
+                    start.minute,
+                    start.second,
+                    tzinfo=start.tzinfo,
+                )
+                google_until = local_until.astimezone(timezone.utc).strftime(
+                    "%Y%m%dT%H%M%SZ"
+                )
+                rule = (
+                    rule[: match.start(1)]
+                    + google_until
+                    + rule[match.end(1) :]
+                )
+
+        # Make date-only EXDATE values explicit for all-day events.
+        if event.get("all_day") and rule.startswith("EXDATE:"):
+            values = rule.removeprefix("EXDATE:")
+            if all(
+                len(value) == 8 and value.isdigit()
+                for value in values.split(",")
+                if value
+            ):
+                rule = f"EXDATE;VALUE=DATE:{values}"
+
+        rules.append(rule)
+
+    return rules
+
+
 def _assignee_names(event: dict, metadata: dict) -> list[str]:
     user_names = _calendar_users(metadata)
     names = []
@@ -168,17 +220,20 @@ class Event:
         label_id = _extract_label_id(event)
         label = _calendar_labels(metadata).get(label_id) or {}
 
+        start = datetime.fromtimestamp(
+            event["start_at"] / 1000,
+            tz=start_tz,
+        )
+        end = datetime.fromtimestamp(
+            event["end_at"] / 1000,
+            tz=end_tz,
+        )
+
         return cls(
             id=event["id"],
             title=event["title"],
-            start=datetime.fromtimestamp(
-                event["start_at"] / 1000,
-                tz=start_tz,
-            ),
-            end=datetime.fromtimestamp(
-                event["end_at"] / 1000,
-                tz=end_tz,
-            ),
+            start=start,
+            end=end,
             all_day=event["all_day"],
             location=event.get("location") or None,
             description=event.get("note") or None,
@@ -186,11 +241,7 @@ class Event:
             label_name=label.get("name") or None,
             label_color=label.get("color"),
             assignee_names=_assignee_names(event, metadata),
-            recurrence=[
-                rule.strip()
-                for rule in (event.get("recurrences") or [])
-                if isinstance(rule, str) and rule.strip()
-            ],
+            recurrence=_normalize_recurrence_rules(event, start),
             parent_id=event.get("parent_id") or None,
             recurring_uuid=event.get("recurring_uuid") or None,
         )
