@@ -152,15 +152,39 @@ def _normalize_recurrence_rules(event: dict, start: datetime) -> list[str]:
                     + rule[match.end(1) :]
                 )
 
-        # Make date-only EXDATE values explicit for all-day events.
-        if event.get("all_day") and rule.startswith("EXDATE:"):
-            values = rule.removeprefix("EXDATE:")
-            if all(
-                len(value) == 8 and value.isdigit()
-                for value in values.split(",")
-                if value
-            ):
-                rule = f"EXDATE;VALUE=DATE:{values}"
+        if event.get("all_day"):
+            # Google requires recurrence values for an all-day DTSTART to use DATE,
+            # not DATE-TIME. TimeTree can emit UTC date-times for EXDATE/RDATE.
+            if rule.startswith("RRULE:"):
+                match = re.search(
+                    r"UNTIL=(\d{8})T\d{6}Z(?=;|$)",
+                    rule,
+                )
+                if match:
+                    rule = (
+                        rule[: match.start()]
+                        + f"UNTIL={match.group(1)}"
+                        + rule[match.end() :]
+                    )
+
+            for prefix in ("EXDATE", "RDATE"):
+                plain_prefix = f"{prefix}:"
+                value_date_prefix = f"{prefix};VALUE=DATE:"
+                if rule.startswith(plain_prefix):
+                    values = rule.removeprefix(plain_prefix).split(",")
+                    normalized = []
+                    for value in values:
+                        value = value.strip()
+                        if not value:
+                            continue
+                        match = re.match(r"^(\d{8})(?:T\d{6}Z)?$", value)
+                        if match:
+                            normalized.append(match.group(1))
+                        else:
+                            normalized = []
+                            break
+                    if normalized:
+                        rule = value_date_prefix + ",".join(normalized)
 
         rules.append(rule)
 
