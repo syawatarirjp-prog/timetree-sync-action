@@ -81,6 +81,7 @@ def _sync_calendar(client, google, google_events, calendar):
     created_count = 0
     updated_count = 0
     deleted_count = 0
+    protected_count = 0
     skipped_count = 0
 
     for event in events:
@@ -115,31 +116,43 @@ def _sync_calendar(client, google, google_events, calendar):
         else:
             skipped_count += 1
 
+        # Safety mode: retain duplicates until their identities can be reviewed.
+        # Deleting a recurring exception or a temporary duplicate is irreversible.
         for duplicate in matches[1:]:
-            google.delete_event(
-                Config.GOOGLE_CALENDAR_ID,
+            protected_count += 1
+            logger.warning(
+                "PROTECTED duplicate (no deletion): calendar=%s timetree_id=%s google_id=%s",
+                calendar.name,
+                event.id,
                 duplicate["id"],
             )
-            deleted_count += 1
 
+    # Safety mode: a transient incomplete TimeTree fetch must never erase
+    # existing Google Calendar events. Report deletion candidates only.
+    # Real deletions in TimeTree are intentionally NOT propagated in this mode.
     for timetree_id, matches in google_event_map.items():
         if timetree_id in timetree_ids:
             continue
 
         for google_event in matches:
-            google.delete_event(
-                Config.GOOGLE_CALENDAR_ID,
+            protected_count += 1
+            logger.warning(
+                "PROTECTED absent from TimeTree fetch (no deletion): "
+                "calendar=%s timetree_id=%s google_id=%s",
+                calendar.name,
+                timetree_id,
                 google_event["id"],
             )
-            deleted_count += 1
 
     logger.info(
-        "Calendar '%s' sync complete: created=%d updated=%d deleted=%d skipped=%d",
+        "Calendar '%s' sync complete: created=%d updated=%d deleted=%d "
+        "skipped=%d protected_deletions=%d",
         calendar.name,
         created_count,
         updated_count,
         deleted_count,
         skipped_count,
+        protected_count,
     )
 
 
